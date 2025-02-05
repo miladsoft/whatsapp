@@ -36,6 +36,14 @@ const question = (text: string) => new Promise<string>((resolve) => {
     rl.question(text, resolve);
 });
 
+// Add this helper function after the imports
+const formatJID = (jid: string): string => {
+    if (!jid.includes('@s.whatsapp.net') && !jid.includes('@g.us')) {
+        return `${jid}@s.whatsapp.net`;
+    }
+    return jid;
+}
+
 // the store maintains the data of the WA connection in memory
 // can be written out to a file & read from it
 const store = useStore ? makeInMemoryStore({ logger }) : undefined
@@ -58,9 +66,10 @@ const handleUserInput = async (sock: any) => {
 
         switch (choice) {
             case '1':
-                const jid = await question('Enter the JID to send test messages: ');
+                let jid = await question('Enter the phone number or JID: ');
+                jid = formatJID(jid);
+                console.log('Using JID:', jid);
                 await startTest(sock, jid);
-                // Re-show menu after test completes
                 await handleUserInput(sock);
                 break;
             case '2':
@@ -453,8 +462,11 @@ process.on('SIGINT', () => {
 async function startTest(sock: any, jid: string) {
 	console.log('Starting test sequence...');
 	try {
+		const formattedJid = formatJID(jid);
+        console.log('Sending messages to:', formattedJid);
+		
 		// Send text message
-		await sock.sendMessage(jid, { text: 'Test message 1' });
+		await sock.sendMessage(formattedJid, { text: 'Test message 1' });
 		
 		// Example: Send an image (commented out as it needs a valid path)
 		// await sock.sendMessage(jid, { 
@@ -463,7 +475,7 @@ async function startTest(sock: any, jid: string) {
 		// });
 
 		// Example: Send a simple poll
-		await sock.sendMessage(jid, {
+		await sock.sendMessage(formattedJid, {
 			poll: {
 				name: 'Test poll',
 				values: ['Option 1', 'Option 2', 'Option 3'],
@@ -472,7 +484,7 @@ async function startTest(sock: any, jid: string) {
 		});
 
 		// Send a location
-		await sock.sendMessage(jid, { 
+		await sock.sendMessage(formattedJid, { 
 			location: { 
 				degreesLatitude: 0, 
 				degreesLongitude: 0 
@@ -483,5 +495,6 @@ async function startTest(sock: any, jid: string) {
 		console.log('Test sequence completed successfully');
 	} catch (error) {
 		console.error('Error during test:', error);
+		throw error;
 	}
 }
