@@ -1,0 +1,21 @@
+{
+  "name": "wp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.12",
+    "baileys": "github:WhiskeySockets/Baileys",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/qrcode-terminal": "^0.12.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "start": "ts-node index.ts"
+  }
+}
