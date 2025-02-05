@@ -6,6 +6,12 @@ import qrcode from 'qrcode-terminal'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
 import P from 'pino'
+import express, { Request, Response, RequestHandler } from 'express';
+import cors from 'cors';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { ParamsDictionary } from 'express-serve-static-core';
+import { ParsedQs } from 'qs';
 
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'trace'
@@ -498,3 +504,126 @@ async function startTest(sock: any, jid: string) {
 		throw error;
 	}
 }
+
+// Create express app and http server
+const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+
+// Store active WhatsApp connections
+const connections = new Map();
+
+// Move socket connection handler to a function
+function setupSocketEvents(sock: any) {
+    sock.ev.on('connection.update', (update: any) => {
+        const { connection, lastDisconnect, qr } = update;
+        
+        if (qr) {
+            io.emit('qr', { qr });
+        }
+        
+        if (connection === 'open') {
+            io.emit('status', { status: 'connected' });
+        }
+        
+        // ...existing connection handling code...
+    });
+}
+
+// Start WhatsApp connection
+async function startWhatsAppConnection(sessionId: string) {
+    const sock = await startSock();
+    connections.set(sessionId, sock);
+    setupSocketEvents(sock);
+    return sock;
+}
+
+// Define interfaces for request body types
+interface MessageRequest {
+    sessionId: string;
+    phoneNumber: string;
+    message: string;
+}
+
+// Define request interfaces
+interface SessionStartRequest extends Request {
+	body: Record<string, never>;
+}
+
+interface MessageSendRequest extends Request<ParamsDictionary, any, {
+	sessionId: string;
+	phoneNumber: string;
+	message: string;
+}> {}
+
+interface SessionStatusRequest extends Request {
+    params: {
+        sessionId: string;
+    };
+}
+
+// Update route handlers with proper typing
+const sessionStartHandler: RequestHandler = async (_req: SessionStartRequest, res: Response) => {
+    try {
+        const sessionId = `session_${Date.now()}`;
+        const sock = await startWhatsAppConnection(sessionId);
+        res.json({ sessionId, status: 'connecting' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to start session' });
+    }
+};
+
+const messageSendHandler: RequestHandler = async (req: MessageSendRequest, res: Response): Promise<void> => {
+	try {
+		const { sessionId, phoneNumber, message } = req.body;
+		const sock = connections.get(sessionId);
+		
+		if (!sock) {
+			res.status(404).json({ error: 'Session not found' });
+			return;
+		}
+
+		const jid = formatJID(phoneNumber);
+		await sock.sendMessage(jid, { text: message });
+		res.json({ success: true, messageId: Date.now() });
+	} catch (error) {
+		res.status(500).json({ error: 'Failed to send message' });
+	}
+};
+
+// Apply the handlers to routes
+app.post('/api/session/start', sessionStartHandler);
+app.post('/api/message/send', messageSendHandler);
+app.get('/api/session/status/:sessionId', sessionStartHandler);
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+	console.log('Client connected');
+	
+	socket.on('disconnect', () => {
+		console.log('Client disconnected');
+	});
+});
+
+app.get('/api/session/status/:sessionId', async (req: SessionStatusRequest, res: Response) => {
+	const sock = connections.get(req.params.sessionId);
+	res.json({ 
+		active: !!sock,
+		status: sock ? 'connected' : 'disconnected'
+	});
+});
+
+// Use server.listen instead of app.listen
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});

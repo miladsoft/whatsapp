@@ -67,6 +67,19 @@
             width: 40px;
             height: 40px;
         }
+        .message-form {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+        }
+        .session-info {
+            background: #e7f3ef;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -107,6 +120,25 @@
                 <div id="connection-log" class="mt-3">
                     <div class="text-muted text-center" id="last-seen"></div>
                 </div>
+
+                <!-- Message Sending Form -->
+                <div class="message-form" id="messageForm" style="display: none;">
+                    <h4>Send Message</h4>
+                    <div class="mb-3">
+                        <label class="form-label">Phone Number</label>
+                        <input type="text" class="form-control" id="phoneNumber" placeholder="+1234567890">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Message</label>
+                        <textarea class="form-control" id="message" rows="3"></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="sendMessage()">Send Message</button>
+                </div>
+
+                <!-- Session Info -->
+                <div class="session-info" id="sessionInfo" style="display: none;">
+                    <strong>Session ID:</strong> <span id="sessionId"></span>
+                </div>
             </div>
         </div>
     </div>
@@ -116,6 +148,7 @@
         const statusDiv = document.getElementById('status');
         const loadingDiv = document.getElementById('loading');
         const lastSeenDiv = document.getElementById('last-seen');
+        let currentSessionId = null;
 
         function updateStatus(message, type) {
             statusDiv.className = 'text-center status-indicator status-' + type;
@@ -128,6 +161,55 @@
 
         function updateLastSeen(timestamp) {
             lastSeenDiv.textContent = `Last activity: ${new Date(timestamp).toLocaleString()}`;
+        }
+
+        async function startSession() {
+            try {
+                const response = await fetch('http://localhost:3000/api/session/start', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                currentSessionId = data.sessionId;
+                document.getElementById('sessionId').textContent = currentSessionId;
+                document.getElementById('sessionInfo').style.display = 'block';
+            } catch (error) {
+                console.error('Failed to start session:', error);
+            }
+        }
+
+        async function sendMessage() {
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            const message = document.getElementById('message').value;
+
+            if (!phoneNumber || !message) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3000/api/message/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sessionId: currentSessionId,
+                        phoneNumber,
+                        message
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert('Message sent successfully!');
+                    document.getElementById('message').value = '';
+                } else {
+                    alert('Failed to send message');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                alert('Error sending message');
+            }
         }
 
         // Listen for events
@@ -145,6 +227,8 @@
                         qrContainer.innerHTML = '<h4 class="text-success">✓ Connected Successfully!</h4>';
                         updateStatus('Connected to WhatsApp', 'connected');
                         updateLastSeen(Date.now());
+                        document.getElementById('qr-container').style.display = 'none';
+                        document.getElementById('messageForm').style.display = 'block';
                     }
                     break;
                 
@@ -163,6 +247,7 @@
         // Initial state
         updateStatus('Initializing...', 'connecting');
         showLoading(true);
+        startSession();
     </script>
 </body>
 </html>
