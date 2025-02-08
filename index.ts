@@ -105,6 +105,9 @@ const handleUserInput = async (sock: any) => {
     }
 }
 
+// Add global variable to store WhatsApp connection
+let globalSock: any = null;
+
 // start a connection
 const startSock = async() => {
 	const { state, saveCreds } = await useMultiFileAuthState('auth_info')
@@ -130,6 +133,9 @@ const startSock = async() => {
 		getMessage,
 	})
 
+	// Store socket connection globally
+    globalSock = sock;
+
 	store?.bind(sock.ev)
 
 	// Handle QR code events
@@ -137,18 +143,19 @@ const startSock = async() => {
 		const { connection, lastDisconnect, qr } = update
 		
 		if(qr) {
-			// Generate QR in terminal
+			 // Emit QR code to all connected clients
+			io.emit('qr', { qr });
 			qrcode.generate(qr, {small: true})
-			
-			// Convert QR to ASCII art for web display
-			qrcode.generate(qr, { small: true }, (qrAscii) => {
-				// If running in browser environment
-				if (typeof window !== 'undefined') {
-					window.postMessage({ type: 'qr', qr: qrAscii }, '*')
-				}
-			})
 		}
 
+		if(connection === 'connecting') {
+			io.emit('status', { status: 'connecting' });
+		}
+
+		if(connection === 'open') {
+			io.emit('status', { status: 'connected' });
+		}
+		
 		if(connection === 'connecting') {
 			console.log('Connecting to WhatsApp...');
             if (typeof window !== 'undefined') {
@@ -321,8 +328,7 @@ const startSock = async() => {
 						  ) {
 							const historySyncNotification = getHistoryMsg(msg.message)
 							if (
-							  historySyncNotification?.syncType ==
-							  proto.HistorySync.HistorySyncType.ON_DEMAND
+							  historySyncNotification?.syncType == proto.HistorySync.HistorySyncType.ON_DEMAND
 							) {
 							  const { messages } =
 								await downloadAndProcessHistorySyncNotification(
@@ -609,8 +615,8 @@ app.get('/api/session/status/:sessionId', sessionStartHandler);
 io.on('connection', (socket) => {
 	console.log('Client connected');
 	
-	socket.on('disconnect', () => {
-		console.log('Client disconnected');
+	socket.on("disconnect", () => {
+		console.log("Client disconnected");
 	});
 });
 
@@ -626,4 +632,77 @@ app.get('/api/session/status/:sessionId', async (req: SessionStatusRequest, res:
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+// Socket.IO event handlers
+io.on('connection', (socket) => {
+    console.log('Client connected');
+
+    socket.on('send-message', async (data) => {
+        try {
+            if (!globalSock) {
+                throw new Error('WhatsApp connection not initialized');
+            }
+            const jid = formatJID(data.phone);
+            await globalSock.sendMessage(jid, { text: data.message });
+            socket.emit('message', { success: true, message: 'Message sent successfully' });
+        } catch (error) {
+            socket.emit('message', { success: false, message: 'Failed to send message' });
+        }
+    });
+
+    socket.on('test-text', async (data) => {
+        try {
+            if (!globalSock) {
+                throw new Error('WhatsApp connection not initialized');
+            }
+            const jid = formatJID(data.phone);
+            await globalSock.sendMessage(jid, { text: 'Test message from WhatsApp Bot' });
+            socket.emit('message', { success: true, message: 'Test message sent' });
+        } catch (error) {
+            socket.emit('message', { success: false, message: 'Failed to send test message' });
+        }
+    });
+
+    socket.on('test-location', async (data) => {
+        try {
+            if (!globalSock) {
+                throw new Error('WhatsApp connection not initialized');
+            }
+            const jid = formatJID(data.phone);
+            await globalSock.sendMessage(jid, { 
+                location: { 
+                    degreesLatitude: 37.7749,
+                    degreesLongitude: -122.4194 
+                },
+                name: 'Test Location'
+            });
+            socket.emit('message', { success: true, message: 'Location sent' });
+        } catch (error) {
+            socket.emit('message', { success: false, message: 'Failed to send location' });
+        }
+    });
+
+    socket.on('test-poll', async (data) => {
+        try {
+            if (!globalSock) {
+                throw new Error('WhatsApp connection not initialized');
+            }
+            const jid = formatJID(data.phone);
+            await globalSock.sendMessage(jid, {
+                poll: {
+                    name: 'Test poll',
+                    values: ['Option 1', 'Option 2', 'Option 3'],
+                    selectableCount: 1
+                }
+            });
+            socket.emit('message', { success: true, message: 'Poll sent' });
+        } catch (error) {
+            socket.emit('message', { success: false, message: 'Failed to send poll' });
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Client disconnected');
+    });
 });

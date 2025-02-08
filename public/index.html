@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot UI</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="qr-section" id="qr-section">
+            <h2>Scan QR Code</h2>
+            <div id="qr-container">
+                <pre id="qr-code"></pre>
+            </div>
+            <div id="connection-status">Waiting for QR code...</div>
+        </div>
+
+        <div class="message-section" id="message-section" style="display: none;">
+            <h2>Send Message</h2>
+            <div class="form-group">
+                <label for="phone">Phone Number:</label>
+                <input type="text" id="phone" placeholder="Enter phone number">
+            </div>
+            <div class="form-group">
+                <label for="message">Message:</label>
+                <textarea id="message" placeholder="Enter your message"></textarea>
+            </div>
+            <button id="send-btn">Send Message</button>
+            
+            <div class="test-section">
+                <h3>Quick Tests</h3>
+                <button id="test-text">Test Text Message</button>
+                <button id="test-location">Test Location</button>
+                <button id="test-poll">Test Poll</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+</body>
+</html>
